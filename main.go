@@ -47,12 +47,22 @@ func (l *LocalMarkDB) Get(index int) (string, error) {
 }
 
 func (l *LocalMarkDB) Add(path string) error {
+	writtenPaths, err := l.List()
+	if err != nil {
+		return err
+	}
+	var paths []string
+	paths = append(paths, path)
+	paths = append(paths, writtenPaths...)
+	l.Clear()
 	file, err := os.OpenFile(l.DBFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, l.filePerm)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	_, err = file.WriteString(path + "\n")
+	for _, item := range paths {
+		_, err = file.WriteString(item + "\n")
+	}
 	return err
 }
 
