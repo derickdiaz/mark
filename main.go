@@ -162,13 +162,15 @@ func (m *MarkCli) Back(args []string) {
 	index, err := strconv.Atoi(args[0])
 	m.handleError(err)
 	arr := strings.Split(cwd, "/")
-	if len(arr)-index < 0 {
+	if index < 0 {
 		m.handleError(errors.New("invalid index"))
 	}
 	directoriesBack := len(arr) - index
-	if directoriesBack <= 0 {
+	if directoriesBack == 1 {
 		fmt.Println("/")
 		return
+	} else if directoriesBack <= 0 {
+		m.handleError(errors.New("invalid index"))
 	}
 	fmt.Println(strings.Join(arr[0:directoriesBack], "/"))
 }
