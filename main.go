@@ -266,6 +266,13 @@ back() {
 	fi
 }
 
+jump() {
+	local readonly DEST=$(mark jump $1)
+	if [[ ! -z $DEST ]]; then
+		cd $DEST
+	fi
+}
+
 2. Run the following command
 source ~/.bashrc
 `)
