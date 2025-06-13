@@ -148,6 +148,7 @@ Available Commands:
 	clear           Clears out the paths in the mark db
 	delete <index>  Deletes out a path in mark db based on the index provided
 	get    <index>  Get the path in mark db based on the index provided
+	jump   <index>  Prints out the number of directories jumping foward from the beginning
 	list            List out the all the marked paths by index
 	install         Prints out directions to create move and back commands in your .bashrc
 `)
@@ -173,6 +174,21 @@ func (m *MarkCli) Back(args []string) {
 		m.handleError(errors.New("invalid index"))
 	}
 	fmt.Println(strings.Join(arr[0:directoriesBack], "/"))
+}
+
+func (m *MarkCli) Jump(args []string) {
+	cwd, err := os.Getwd()
+	m.handleError(err)
+	if len(args) != 1 {
+		m.handleError(errors.New("invalid number of args"))
+	}
+	index, err := strconv.Atoi(args[0])
+	m.handleError(err)
+	arr := strings.Split(cwd, "/")
+	if index < 0 || index > len(arr)-1 {
+		m.handleError(errors.New("invalid index"))
+	}
+	fmt.Println(strings.Join(arr[0:index+1], "/"))
 }
 
 func (m *MarkCli) List(args []string) {
@@ -291,6 +307,7 @@ func main() {
 		"help":    func(args []string) { mark.DisplayHelp(args) },
 		"install": func(args []string) { mark.Install(args) },
 		"list":    func(args []string) { mark.List(args) },
+		"jump":    func(args []string) { mark.Jump(args) },
 	}
 	// If no arguments are specified then the default action is to
 	// add the current working directory
