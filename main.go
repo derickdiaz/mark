@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -148,9 +150,10 @@ Available Commands:
 	clear           Clears out the paths in the mark db
 	delete <index>  Deletes out a path in mark db based on the index provided
 	get    <index>  Get the path in mark db based on the index provided
-	jump   <index>  Prints out the number of directories jumping foward from the beginning
+	jump   <index>  Prints out the number of directories jumping forward from the beginning
 	list            List out the all the marked paths by index
 	install         Prints out directions to create move and back commands in your .bashrc
+	forward <regex> Looks foward for directories that match a regex
 `)
 }
 
@@ -229,6 +232,60 @@ func (m *MarkCli) Add(args []string) {
 	}
 }
 
+func (m *MarkCli) Forward(args []string) {
+	if len(args) != 1 {
+		m.handleError(errors.New("invalid number of arguments"))
+	}
+	cwd, err := os.Getwd()
+	m.handleError(err)
+	regex, err := regexp.Compile(args[0])
+	m.handleError(err)
+
+	var matches []struct {
+		Name  string
+		IsDir bool
+	}
+	filepath.WalkDir(cwd, func(path string, d fs.DirEntry, err error) error {
+		if regex.MatchString(d.Name()) {
+			matches = append(matches, struct {
+				Name  string
+				IsDir bool
+			}{
+				Name:  path,
+				IsDir: d.IsDir(),
+			})
+		}
+		return nil
+	})
+
+	if len(matches) == 0 {
+		m.handleError(errors.New("no matches found"))
+	}
+
+	for index, path := range matches {
+		fmt.Fprintf(os.Stderr, "[%v] %v\n", index, path.Name)
+	}
+
+	var choice int
+	for {
+		fmt.Fprint(os.Stderr, "Choose an option: ")
+		_, err = fmt.Scanf("%d", &choice)
+		if err == nil && choice >= 0 && choice < len(matches) {
+			break
+		}
+		fmt.Fprintln(os.Stderr, "invalid index try again")
+	}
+	item := matches[choice]
+	path := item.Name
+	if !item.IsDir {
+		arr := strings.Split(item.Name, "/")
+		if len(arr) != 1 {
+			path = strings.Join(arr[0:len(arr)-1], "/")
+		}
+	}
+	fmt.Println(path)
+}
+
 func (m *MarkCli) Get(args []string) {
 	if len(args) > 1 {
 		m.handleError(errors.New("invalid number of arguments"))
@@ -268,6 +325,13 @@ back() {
 
 jump() {
 	local readonly DEST=$(mark jump $1)
+	if [[ ! -z $DEST ]]; then
+		cd $DEST
+	fi
+}
+
+forward() {
+	local readonly DEST=$(mark forward $1)
 	if [[ ! -z $DEST ]]; then
 		cd $DEST
 	fi
@@ -315,6 +379,7 @@ func main() {
 		"install": func(args []string) { mark.Install(args) },
 		"list":    func(args []string) { mark.List(args) },
 		"jump":    func(args []string) { mark.Jump(args) },
+		"forward": func(args []string) { mark.Forward(args) },
 	}
 	// If no arguments are specified then the default action is to
 	// add the current working directory
