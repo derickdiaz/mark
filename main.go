@@ -193,7 +193,10 @@ func (m *MarkCli) Switch(args []string) {
 	if err != nil {
 		m.handleError(errors.New("source and dest must be an integer"))
 	}
-	m.db.Switch(source, dest)
+	err = m.db.Switch(source, dest)
+    if err != nil {
+        m.handleError(err)
+    }
     items, err := m.db.List()
     if err != nil {
         m.handleError(err)
