@@ -167,17 +167,17 @@ Usage:
 	mark [command]
 
 Available Commands:
-	help                    Displays help menu
-	add                     Adds the current working directory to mark db(Default action)
-	back   <index>          Prints out the number of directories back based on the index provided
-	clear                   Clears out the paths in the mark db
-	delete <index>          Deletes out a path in mark db based on the index provided
-	get    <index>          Get the path in mark db based on the index provided
-    switch <index> <index>  Switch stored paths by their index
-	jump   <index>          Prints out the number of directories jumping forward from the beginning
-	list                    List out the all the marked paths by index
-	install                 Prints out directions to create move and back commands in your .bashrc
-	forward <regex>         Looks foward for directories that match a regex
+    add                         Adds the current working directory to mark db(Default action)
+    back   <index>              Prints out the number of directories back based on the index provided
+    clear                       Clears out the paths in the mark db
+    delete <index>              Deletes out a path in mark db based on the index provided
+    forward <regex>             Looks foward for directories that match a regex
+    get    <index>              Get the path in mark db based on the index provided
+    help                        Displays help menu
+    install                     Prints out directions to create move and back commands in your .bashrc
+    jump   <index>              Prints out the number of directories jumping forward from the beginning
+    list                        List out the all the marked paths by index
+    switch <source> <dest>      Switch stored paths by their index
 `)
 }
 
