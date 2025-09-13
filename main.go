@@ -18,6 +18,7 @@ type MarkDB interface {
 	Add(path string) error
 	List() ([]string, error)
 	Clear() error
+	Switch(source, dest int) error
 	Delete(index int) error
 }
 
@@ -106,6 +107,28 @@ func (l *LocalMarkDB) Clear() error {
 	return os.Truncate(l.DBFile, 0)
 }
 
+func (l *LocalMarkDB) Switch(source, dest int) error {
+	items, err := l.List()
+    if err != nil {
+        return err
+    }
+	if source < 0 || source > len(items)-1 {
+		return errors.New("invalid source index")
+	}
+	if dest < 0 || dest > len(items)-1 {
+		return errors.New("invalid dest index")
+	}
+	sourceItem := items[source]
+	destItem := items[dest]
+	items[dest] = sourceItem
+	items[source] = destItem
+	l.Clear()
+	for i := len(items)-1; i >= 0; i-- {
+		l.Add(items[i])
+	}
+    return nil
+}
+
 func GetLocalMarkFile() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -144,17 +167,40 @@ Usage:
 	mark [command]
 
 Available Commands:
-	help            Displays help menu
-	add             Adds the current working directory to mark db(Default action)
-	back   <index>  Prints out the number of directories back based on the index provided
-	clear           Clears out the paths in the mark db
-	delete <index>  Deletes out a path in mark db based on the index provided
-	get    <index>  Get the path in mark db based on the index provided
-	jump   <index>  Prints out the number of directories jumping forward from the beginning
-	list            List out the all the marked paths by index
-	install         Prints out directions to create move and back commands in your .bashrc
-	forward <regex> Looks foward for directories that match a regex
+	help                    Displays help menu
+	add                     Adds the current working directory to mark db(Default action)
+	back   <index>          Prints out the number of directories back based on the index provided
+	clear                   Clears out the paths in the mark db
+	delete <index>          Deletes out a path in mark db based on the index provided
+	get    <index>          Get the path in mark db based on the index provided
+    switch <index> <index>  Switch stored paths by their index
+	jump   <index>          Prints out the number of directories jumping forward from the beginning
+	list                    List out the all the marked paths by index
+	install                 Prints out directions to create move and back commands in your .bashrc
+	forward <regex>         Looks foward for directories that match a regex
 `)
+}
+
+func (m *MarkCli) Switch(args []string) {
+	if len(args) != 2 {
+		m.handleError(errors.New("invalid number of args"))
+	}
+	source, err := strconv.Atoi(args[0])
+	if err != nil {
+		m.handleError(errors.New("source and dest must be an integer"))
+	}
+	dest, err := strconv.Atoi(args[1])
+	if err != nil {
+		m.handleError(errors.New("source and dest must be an integer"))
+	}
+	m.db.Switch(source, dest)
+    items, err := m.db.List()
+    if err != nil {
+        m.handleError(err)
+    }
+    for index, item := range items {
+		fmt.Printf("[%v] %v\n", index, item)
+    }
 }
 
 func (m *MarkCli) Back(args []string) {
@@ -380,6 +426,7 @@ func main() {
 		"list":    func(args []string) { mark.List(args) },
 		"jump":    func(args []string) { mark.Jump(args) },
 		"forward": func(args []string) { mark.Forward(args) },
+		"switch":  func(args []string) { mark.Switch(args) },
 	}
 	// If no arguments are specified then the default action is to
 	// add the current working directory
