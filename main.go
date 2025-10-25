@@ -1,22 +1,26 @@
 package main
 
 import (
-	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 )
 
+type Mark struct {
+	Path  string `json:"path"`
+	Alias string `json:"alias"`
+}
+
 type MarkDB interface {
-	Get(index int) (string, error)
-	Add(path string) error
-	List() ([]string, error)
+	Get(index int) (*Mark, error)
+	Add(mark *Mark) error
+	List() ([]*Mark, error)
 	Clear() error
 	Switch(source, dest int) error
 	Delete(index int) error
@@ -35,54 +39,51 @@ func NewLocalMarkDB() (*LocalMarkDB, error) {
 	return &LocalMarkDB{DBFile: dbFile, filePerm: 0660}, nil
 }
 
-func (l *LocalMarkDB) Get(index int) (string, error) {
+func (l *LocalMarkDB) Get(index int) (mark *Mark, err error) {
 	if index < 0 {
-		return "", errors.New("invalid index")
+		err = errors.New("invalid index")
+		return
 	}
-	paths, err := l.List()
+	marks, err := l.List()
 	if err != nil {
-		return "", err
+		return
 	}
-	if index < 0 || index > len(paths)-1 {
-		return "", errors.New("invalid index")
+	if index < 0 || index > len(marks)-1 {
+		err = errors.New("invalid index")
+		return
 	}
-	return paths[index], nil
+	return marks[index], nil
 }
 
-func (l *LocalMarkDB) Add(path string) error {
-	writtenPaths, err := l.List()
+func (l *LocalMarkDB) Add(mark *Mark) (err error) {
+	marks, err := l.List()
 	if err != nil {
-		return err
+		return
 	}
-	var paths []string
-	paths = append(paths, path)
-	paths = append(paths, writtenPaths...)
-	l.Clear()
-	file, err := os.OpenFile(l.DBFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, l.filePerm)
+	for _, tmark := range marks {
+		if mark.Path == tmark.Path {
+			err = errors.New("mark already exists")
+			return
+		}
+	}
+	marks = append(marks, mark)
+	jsonData, err := json.MarshalIndent(marks, "", " ")
 	if err != nil {
-		return err
+		return
 	}
-	defer file.Close()
-	for _, item := range paths {
-		_, err = file.WriteString(item + "\n")
-	}
-	return err
+	err = os.WriteFile(l.DBFile, jsonData, 0660)
+	return
 }
 
-func (l *LocalMarkDB) List() ([]string, error) {
+func (l *LocalMarkDB) List() (marks []*Mark, err error) {
 	file, err := os.OpenFile(l.DBFile, os.O_RDONLY|os.O_CREATE, l.filePerm)
 	if err != nil {
-		return nil, err
+		return
 	}
 	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	var results []string
-	for scanner.Scan() {
-		line := scanner.Text()
-		results = append(results, line)
-	}
-	return results, nil
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&marks)
+	return
 }
 
 func (l *LocalMarkDB) Delete(suppliedIndex int) error {
@@ -104,14 +105,14 @@ func (l *LocalMarkDB) Delete(suppliedIndex int) error {
 }
 
 func (l *LocalMarkDB) Clear() error {
-	return os.Truncate(l.DBFile, 0)
+	return os.WriteFile(l.DBFile, []byte("[]"), 0660)
 }
 
 func (l *LocalMarkDB) Switch(source, dest int) error {
 	items, err := l.List()
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 	if source < 0 || source > len(items)-1 {
 		return errors.New("invalid source index")
 	}
@@ -123,10 +124,10 @@ func (l *LocalMarkDB) Switch(source, dest int) error {
 	items[dest] = sourceItem
 	items[source] = destItem
 	l.Clear()
-	for i := len(items)-1; i >= 0; i-- {
-		l.Add(items[i])
+	for _, mark := range items {
+		l.Add(mark)
 	}
-    return nil
+	return nil
 }
 
 func GetLocalMarkFile() (string, error) {
@@ -168,17 +169,16 @@ Usage:
 
 Available Commands:
     add                         Adds the current working directory to mark db(Default action)
-    back   <index>              Prints out the number of directories back based on the index provided
+    back    <index>             Prints out the number of directories back based on the index provided
     clear                       Clears out the paths in the mark db
-    delete <index>              Deletes out a path in mark db based on the index provided
+    delete  <index>             Deletes out a path in mark db based on the index provided
     forward <regex>             Looks foward for directories that match a regex
-    get    <index>              Get the path in mark db based on the index provided
+    get     <index>             Get the path in mark db based on the index provided
     help                        Displays help menu
     install                     Prints out directions to create move and back commands in your .bashrc
-    jump   <index>              Prints out the number of directories jumping forward from the beginning
+    jump    <index>             Prints out the number of directories jumping forward from the beginning
     list                        List out the all the marked paths by index
-    switch <source> <dest>      Switch stored paths by their index
-`)
+    switch  <source> <dest>     Switch stored paths by their index`)
 }
 
 func (m *MarkCli) Switch(args []string) {
@@ -194,16 +194,16 @@ func (m *MarkCli) Switch(args []string) {
 		m.handleError(errors.New("source and dest must be an integer"))
 	}
 	err = m.db.Switch(source, dest)
-    if err != nil {
-        m.handleError(err)
-    }
-    items, err := m.db.List()
-    if err != nil {
-        m.handleError(err)
-    }
-    for index, item := range items {
+	if err != nil {
+		m.handleError(err)
+	}
+	items, err := m.db.List()
+	if err != nil {
+		m.handleError(err)
+	}
+	for index, item := range items {
 		fmt.Printf("[%v] %v\n", index, item)
-    }
+	}
 }
 
 func (m *MarkCli) Back(args []string) {
@@ -247,10 +247,10 @@ func (m *MarkCli) List(args []string) {
 	if len(args) != 0 {
 		m.handleError(errors.New("invalid number of arguments"))
 	}
-	paths, err := m.db.List()
+	marks, err := m.db.List()
 	m.handleError(err)
-	for index, path := range paths {
-		fmt.Printf("[%v] %v\n", index, path)
+	for index, mark := range marks {
+		fmt.Printf("[%v] %v\n", index, mark.Path)
 	}
 }
 
@@ -260,24 +260,15 @@ func (m *MarkCli) Add(args []string) {
 	}
 	path, err := os.Getwd()
 	m.handleError(err)
-	paths, err := m.db.List()
+	marks, err := m.db.List()
 	m.handleError(err)
-	if !slices.Contains(paths, path) {
-		err = m.db.Add(path)
-		if err != nil {
-			m.handleError(errors.New("invalid number of arguments"))
-		}
-		return
-	}
-	fmt.Println("path already exists. Moving to top.")
 	m.db.Clear()
-	m.db.Add(path)
-	for _, item := range paths {
-		if item == path {
-			continue
-		}
-		err := m.db.Add(item)
-		m.handleError(err)
+	m.db.Add(&Mark{
+		Path:  path,
+		Alias: "",
+	})
+	for _, mark := range marks {
+		m.db.Add(mark)
 	}
 }
 
@@ -347,9 +338,9 @@ func (m *MarkCli) Get(args []string) {
 			m.handleError(errors.New("index is not a number"))
 		}
 	}
-	path, err := m.db.Get(index)
+	mark, err := m.db.Get(index)
 	m.handleError(err)
-	fmt.Println(path)
+	fmt.Println(mark.Path)
 }
 
 func (m *MarkCli) Install(args []string) {
@@ -401,7 +392,7 @@ func (m *MarkCli) Delete(args []string) {
 		m.handleError(errors.New("specify index"))
 	}
 	index, err := strconv.Atoi(args[0])
-	m.handleError(err)
+	m.handleError(errors.New("invalid index specified"))
 	err = m.db.Delete(index)
 	m.handleError(err)
 }
