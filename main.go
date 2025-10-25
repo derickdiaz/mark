@@ -18,7 +18,8 @@ type Mark struct {
 }
 
 type MarkDB interface {
-	Get(index int) (*Mark, error)
+	GetByAlias(alias string) (*Mark, error)
+	GetByIndex(index int) (*Mark, error)
 	Add(mark *Mark) error
 	List() ([]*Mark, error)
 	Clear() error
@@ -39,7 +40,21 @@ func NewLocalMarkDB() (*LocalMarkDB, error) {
 	return &LocalMarkDB{DBFile: dbFile, filePerm: 0660}, nil
 }
 
-func (l *LocalMarkDB) Get(index int) (mark *Mark, err error) {
+func (l *LocalMarkDB) GetByAlias(alias string) (mark *Mark, err error) {
+	marks, err := l.List()
+	if err != nil {
+		return
+	}
+	for _, mark = range marks {
+		if mark.Alias == alias {
+			return
+		}
+	}
+	err = fmt.Errorf("unable to find mark with alias: %v", alias)
+	return
+}
+
+func (l *LocalMarkDB) GetByIndex(index int) (mark *Mark, err error) {
 	if index < 0 {
 		err = errors.New("invalid index")
 		return
@@ -63,6 +78,10 @@ func (l *LocalMarkDB) Add(mark *Mark) (err error) {
 	for _, tmark := range marks {
 		if mark.Path == tmark.Path {
 			err = errors.New("mark already exists")
+			return
+		}
+		if mark.Alias != "" && mark.Alias == tmark.Alias {
+			err = errors.New("alias already exists")
 			return
 		}
 	}
@@ -250,25 +269,41 @@ func (m *MarkCli) List(args []string) {
 	marks, err := m.db.List()
 	m.handleError(err)
 	for index, mark := range marks {
+		if mark.Alias != "" {
+			fmt.Printf("[%v] [%v] %v\n", index, mark.Alias, mark.Path)
+			continue
+		}
 		fmt.Printf("[%v] %v\n", index, mark.Path)
 	}
 }
 
 func (m *MarkCli) Add(args []string) {
-	if len(args) != 0 {
+	if len(args) > 1 {
 		m.handleError(errors.New("invalid number of arguments"))
+	}
+	alias := ""
+	if len(args) == 1 {
+		alias = args[0]
 	}
 	path, err := os.Getwd()
 	m.handleError(err)
 	marks, err := m.db.List()
 	m.handleError(err)
 	m.db.Clear()
+	temp := marks
 	m.db.Add(&Mark{
 		Path:  path,
-		Alias: "",
+		Alias: alias,
 	})
 	for _, mark := range marks {
-		m.db.Add(mark)
+		err := m.db.Add(mark)
+		if err != nil {
+			m.db.Clear()
+			for _, item := range temp {
+				m.db.Add(item)
+			}
+			m.handleError(err)
+		}
 	}
 }
 
@@ -330,15 +365,22 @@ func (m *MarkCli) Get(args []string) {
 	if len(args) > 1 {
 		m.handleError(errors.New("invalid number of arguments"))
 	}
-	index := 0
 	var err error
-	if len(args) == 1 {
-		index, err = strconv.Atoi(args[0])
+	var mark *Mark
+	index, err := strconv.Atoi(args[0])
+	if err != nil {
+		mark, err = m.db.GetByAlias(args[0])
 		if err != nil {
-			m.handleError(errors.New("index is not a number"))
+			m.handleError(err)
+			return
+		}
+	} else {
+		mark, err = m.db.GetByIndex(index)
+		if err != nil {
+			m.handleError(err)
+			return
 		}
 	}
-	mark, err := m.db.Get(index)
 	m.handleError(err)
 	fmt.Println(mark.Path)
 }
@@ -392,7 +434,9 @@ func (m *MarkCli) Delete(args []string) {
 		m.handleError(errors.New("specify index"))
 	}
 	index, err := strconv.Atoi(args[0])
-	m.handleError(errors.New("invalid index specified"))
+	if err != nil {
+		m.handleError(errors.New("invalid index specified"))
+	}
 	err = m.db.Delete(index)
 	m.handleError(err)
 }
