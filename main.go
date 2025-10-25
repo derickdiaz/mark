@@ -187,7 +187,7 @@ Usage:
 	mark [command]
 
 Available Commands:
-    add                         Adds the current working directory to mark db(Default action)
+    add     <alias>             Adds the current working directory to mark db(Default action)
     back    <index>             Prints out the number of directories back based on the index provided
     clear                       Clears out the paths in the mark db
     delete  <index>             Deletes out a path in mark db based on the index provided
